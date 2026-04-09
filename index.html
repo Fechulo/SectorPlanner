@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sector Planner</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+<style>
+:root {
+  --bg: #080d12;
+  --bg2: #0d1822;
+  --bg3: #112030;
+  --border: #1e3348;
+  --border2: #2a4560;
+  --accent: #00c8ff;
+  --accent2: #0080b0;
+  --text: #9bbccc;
+  --text-bright: #d4eaf5;
+  --green: #00e676;
+  --yellow: #ffca28;
+  --red: #ff5252;
+  --orange: #ff9800;
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-ui: 'Exo 2', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+
+/* HEADER */
+#header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 100;
+}
+#header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.3;
+}
+.logo { display: flex; align-items: center; gap: 8px; }
+.logo-badge {
+  background: var(--accent2);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 2px;
+  letter-spacing: 1px;
+  border: 1px solid var(--accent);
+  text-shadow: 0 0 8px var(--accent);
+}
+.logo-title { font-size: 13px; font-weight: 600; color: var(--text-bright); letter-spacing: 0.5px; }
+.header-sep { width: 1px; height: 24px; background: var(--border); }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.btn {
+  padding: 5px 11px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--border); color: var(--text-bright); border-color: var(--border2); }
+.btn.primary { background: rgba(0,120,160,0.3); border-color: var(--accent2); color: var(--accent); }
+.btn.primary:hover { background: rgba(0,150,200,0.4); }
+.btn.active-toggle { background: rgba(0,120,160,0.4); border-color: var(--accent); color: var(--accent); }
+.btn.success { background: rgba(0,150,80,0.2); border-color: #00a050; color: var(--green); }
+.btn.danger { background: rgba(180,30,30,0.2); border-color: #b04040; color: var(--red); }
+.btn.sm { padding: 3px 8px; font-size: 10px; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+
+/* MAIN */
+#main { flex: 1; display: flex; overflow: hidden; }
+
+/* PANELS */
+.panel { background: var(--bg2); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
+#left-panel { width: 250px; border-right: 1px solid var(--border); }
+#right-panel { width: 300px; border-left: 1px solid var(--border); }
+
+.panel-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg); }
+.tab-btn {
+  flex: 1; padding: 7px; background: none; border: none;
+  border-bottom: 2px solid transparent; color: #5a7a8a;
+  font-size: 10px; font-family: var(--font-ui); font-weight: 600;
+  letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; transition: all 0.15s;
+}
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-btn:hover:not(.active) { color: var(--text); }
+
+.panel-section { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+.panel-section.active { display: flex; }
+.panel-scroll { flex: 1; overflow-y: auto; padding: 8px; }
+.panel-scroll::-webkit-scrollbar { width: 3px; }
+.panel-scroll::-webkit-scrollbar-thumb { background: var(--border2); }
+.panel-footer { padding: 8px; border-top: 1px solid var(--border); display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* LEFT PANEL — SECTOR BUILDER */
+#sector-list-panel { flex: 1; overflow-y: auto; padding: 8px; }
+#sector-list-panel::-webkit-scrollbar { width: 3px; }
+#sector-list-panel::-webkit-scrollbar-thumb { background: var(--border2); }
+.sector-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 7px 8px;
+  margin-bottom: 5px;
+  transition: border-color 0.15s;
+}
+.sector-card.assigning { border-color: var(--accent); box-shadow: 0 0 8px rgba(0,200,255,0.2); }
+.sector-card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.sector-color-dot { width: 10px; height: 10px; border-radius: 1px; flex-shrink: 0; cursor: pointer; }
+.sector-card-name-wrap { flex: 1; min-width: 0; }
+.sector-card-name {
+  font-size: 13px; font-weight: 600; color: var(--text-bright);
+  font-family: var(--font-mono); cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: block; width: 100%;
+}
+.sector-card-name:hover { color: var(--accent); }
+.sector-vhf { font-size: 11px; color: #5a8870; font-family: var(--font-mono); cursor: pointer; }
+.sector-vhf:hover { color: var(--green); }
+.lfunc-chips { display: flex; flex-wrap: wrap; gap: 3px; min-height: 16px; margin-bottom: 5px; }
+.lfunc-chip {
+  padding: 1px 5px; border-radius: 2px; font-size: 11px; font-family: var(--font-mono);
+  background: var(--bg); border: 1px solid var(--border2); color: var(--text);
+}
+
+/* MAP */
+#map-wrap { flex: 1; position: relative; overflow: hidden; }
+#map { width: 100%; height: 100%; background: #05080d; }
+
+#assign-mode-banner {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  background: rgba(17,32,48,0.9); border: 1px solid var(--accent);
+  border-radius: 4px; padding: 6px 14px; font-size: 11px; color: var(--accent);
+  z-index: 500; display: none; gap: 10px; align-items: center;
+}
+#assign-mode-banner span { color: var(--text-bright); }
+
+/* Map overlay controls */
+#map-controls {
+  position: absolute; top: 10px; right: 10px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+
+/* RIGHT PANEL — STATS */
+.stat-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.stat-table th {
+  background: var(--bg); padding: 5px 7px; text-align: left;
+  color: #5a8898; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.5px; border-bottom: 1px solid var(--border); position: sticky; top: 0;
+}
+.stat-table td { padding: 4px 7px; border-bottom: 1px solid rgba(30,51,72,0.5); font-family: var(--font-mono); font-size: 11px; }
+.stat-table tr:hover td { background: var(--bg3); }
+.stat-id { color: var(--text-bright); font-weight: 600; }
+.load-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; }
+.load-bar-bg { width: 36px; height: 4px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+.load-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+//* ROUTES BOTTOM PANEL */
+#routes-panel {
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 44px;
+}
+#rp-toggle {
+  height: 44px; padding: 0 12px; display: flex; align-items: center; gap: 8px;
+  cursor: pointer; background: var(--bg3); border: none; border-bottom: 1px solid var(--border);
+  color: var(--text-bright); font-size: 12px; font-family: var(--font-ui);
+  font-weight: 600; width: 100%; letter-spacing: 0.5px; flex-shrink: 0;
+}
+.rp-arrow { color: var(--accent); font-size: 10px; transition: transform 0.2s; }
+#routes-panel.open .rp-arrow { transform: rotate(180deg); }
+
+/* Routes table container */
+#rp-content {
+  display: none;
+  overflow-y: auto;
+  max-height: calc(45vh - 44px);
+  min-height: 80px;
+}
+#routes-panel.open #rp-content { display: block; }
+#rp-content::-webkit-scrollbar { width: 4px; }
+#rp-content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* Routes table */
+#routes-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+#routes-table th {
+  background: var(--bg); padding: 5px 8px; text-align: left;
+  color: #5a8898; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.5px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 2; white-space: nowrap;
+}
+#routes-table td {
+  padding: 4px 8px; border-bottom: 1px solid rgba(30,51,72,0.4);
+  font-family: var(--font-mono); font-size: 11px; vertical-align: middle;
+}
+#routes-table tr:hover td { background: var(--bg3); }
+.rt-color { width: 28px; }
+.rt-dot { width: 10px; height: 10px; border-radius: 2px; cursor: pointer; border: 1px solid rgba(255,255,255,0.15); display: inline-block; vertical-align: middle; }
+.rt-dot:hover { transform: scale(1.25); }
+.rt-name { width: 125px; color: var(--text-bright); font-weight: 600; white-space: nowrap; }
+.rt-wps { color: #4a6a7a; max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-rate-cell { width: 125px; white-space: nowrap; }
+.rt-rate-inp {
+  background: var(--bg); border: 1px solid var(--border2); border-radius: 2px;
+  color: var(--text-bright); font-family: var(--font-mono); font-size: 11px;
+  padding: 2px 5px; width: 70px; text-align: left;
+}
+.rt-rate-inp:focus { outline: none; border-color: var(--accent); }
+.rt-actions { width: 80px; white-space: nowrap; text-align: right; }
+
+/* MODAL */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+}
+.modal {
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: 6px;
+  padding: 18px; width: 480px; max-width: 95vw; max-height: 90vh;
+  overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+.modal h2 { font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 14px; letter-spacing: 0.5px; }
+.fgrp { margin-bottom: 10px; }
+.fgrp label { display: block; font-size: 10px; color: #5a8898; margin-bottom: 3px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
+.fgrp input, .fgrp textarea, .fgrp select {
+  width: 100%; padding: 6px 9px; background: var(--bg); border: 1px solid var(--border2);
+  border-radius: 3px; color: var(--text-bright); font-size: 12px; font-family: var(--font-mono);
+}
+.fgrp textarea { height: 70px; resize: vertical; }
+.fgrp input:focus, .fgrp textarea:focus { outline: none; border-color: var(--accent); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.hint { font-size: 10px; color: #3a6878; margin-top: 4px; line-height: 1.5; }
+.inline-edit { background: none; border: none; border-bottom: 1px solid transparent; color: inherit; font: inherit; cursor: text; padding: 0; }
+.inline-edit:focus { outline: none; border-bottom-color: var(--accent); }
+.color-options { display: flex; gap: 5px; flex-wrap: wrap; }
+.color-opt { width: 20px; height: 20px; border-radius: 2px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.1s; }
+.color-opt.selected { border-color: white; }
+.config-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 3px; border: 1px solid var(--border); background: var(--bg3); margin-bottom: 5px; }
+.config-name { flex: 1; font-size: 11px; font-weight: 600; color: var(--text-bright); font-family: var(--font-mono); }
+
+/* Toast */
+#toast {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+  background: var(--bg3); border: 1px solid var(--border2);
+  color: var(--text-bright); padding: 8px 16px; border-radius: 4px;
+  font-size: 12px; z-index: 9998; opacity: 0; transition: opacity 0.2s;
+  pointer-events: none; font-family: var(--font-mono);
+}
+#toast.show { opacity: 1; }
+
+/* Empty msg */
+.empty-msg { text-align: center; padding: 24px 12px; color: #3a5a6a; font-size: 12px; line-height: 1.7; }
+
+/* Leaflet overrides */
+.leaflet-container { background: #05080d; }
+.leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.4) saturate(0.5); }
+.leaflet-control-zoom { border: 1px solid var(--border2) !important; }
+.leaflet-control-zoom a { background: var(--bg2) !important; color: var(--text) !important; border-color: var(--border) !important; }
+.leaflet-control-zoom a:hover { background: var(--bg3) !important; color: var(--text-bright) !important; }
+.leaflet-popup-content-wrapper { background: var(--bg2); border: 1px solid var(--border2); border-radius: 4px; }
+.leaflet-popup-tip { background: var(--bg2); }
+.leaflet-popup-content { color: var(--text-bright); font-family: var(--font-mono); font-size: 12px; margin: 8px 12px; }
+.leaflet-control-attribution { display: none; }
+.lfunc-label { background: none; border: none; font-family: var(--font-mono); font-size: 10px; color: rgba(180,210,230,0.6); font-weight: 600; pointer-events: none; white-space: nowrap; }
+.wp-label { background: none; border: none; font-family: var(--font-mono); font-size: 9px; color: rgba(212,234,245,0.85); pointer-events: none; white-space: nowrap; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo">
+    <span class="logo-title">🍕EISN Sector Planner</span>
+  </div>
+  <div class="header-sep"></div>
+  <span id="config-name-display" style="font-size:11px;color:var(--text);font-family:var(--font-mono)">No configuration</span>
+  <div class="header-right">
+    <button class="btn primary" onclick="showNewConfigModal()">＋ New Config</button>
+    <button class="btn" onclick="showSaveConfigModal()">Save</button>
+    <button class="btn" onclick="showLoadConfigModal()">Load</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- LEFT PANEL — SECTOR BUILDER -->
+  <div class="panel" id="left-panel">
+    <div style="padding:7px 8px;border-bottom:1px solid var(--border);background:var(--bg);display:flex;align-items:center;gap:6px;flex-shrink:0">
+      <span style="color:var(--accent);font-size:11px">⬡</span>
+      <span style="font-size:10px;font-weight:600;letter-spacing:.5px;color:#5a8898;text-transform:uppercase">Sector Builder</span>
+      <button class="btn sm primary" id="add-sector-btn" onclick="createNewSector()" style="display:none;margin-left:auto">＋ New Sector</button>
+    </div>
+    <div id="sector-list-panel">
+      <div class="empty-msg" id="sector-empty-msg">Create or load a configuration to build sectors.</div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="map-controls">
+      <button class="btn sm active-toggle" id="btn-toggle-routes" onclick="toggleMapLayer('routes')">Routes</button>
+      <button class="btn sm active-toggle" id="btn-toggle-wpsym" onclick="toggleMapLayer('wpsym')">Fixes</button>
+      <button class="btn sm" id="btn-toggle-wplbl" onclick="toggleMapLayer('wplbl')">Labels</button>
+    </div>
+    <div id="assign-mode-banner">
+      <span id="assign-banner-text">Assigning to sector</span>
+      <button class="btn sm primary" onclick="exitAssignMode()">✓ Finish</button>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL — LFUNC STATS -->
+  <div class="panel" id="right-panel">
+    <div style="padding:7px 8px;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0">
+      <span style="font-size:10px;font-weight:600;letter-spacing:.5px;color:#5a8898;text-transform:uppercase">LFUNC Stats</span>
+    </div>
+    <div class="panel-scroll">
+      <table class="stat-table">
+        <thead><tr><th>LFUNC</th><th>A/C ON FREQ</th><th>CROSSES/HR</th></tr></thead>
+        <tbody id="lfunc-stat-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ROUTES BOTTOM PANEL -->
+<div id="routes-panel">
+  <button id="rp-toggle" onclick="toggleRoutesPanel()">
+    <span style="color:var(--accent)">↕</span>
+    ROUTES
+    <span id="rp-count" style="font-size:10px;color:var(--text);font-weight:400;margin-left:4px"></span>
+    <span style="flex:1"></span>
+    <button class="btn sm primary" onclick="event.stopPropagation();fetchFromAPIs()" id="btn-refresh-routes">↺ Refresh</button>
+  </button>
+  <div id="rp-content">
+    <table id="routes-table">
+      <thead>
+        <tr>
+          <th class="rt-color"></th>
+          <th>Identifier</th>
+          <th class="rt-rate-cell">Rate</th>
+          <th>Route String</th>
+          <th class="rt-actions"></th>
+        </tr>
+      </thead>
+      <tbody id="routes-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:16px;color:#3a5a6a">Fetching routes from API…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="modal-root"></div>
+
+<script>
+// ─── API CONFIG ───────────────────────────────────────────────────────────────
+const API_BASE = 'https://ctp-api.fhandl.workers.dev/api';
+
+// ─── LFUNC DATA ───────────────────────────────────────────────────────────────
+const LFUNC_RAW = {
+  '1A': ['N056.45.00.000:W015.00.00.000','N057.00.00.000:W015.00.00.000','N057.00.00.000:W010.00.00.000','N056.04.00.000:W010.00.00.000','N056.45.00.000:W015.00.00.000'],
+  '1B': ['N056.15.00.000:W015.00.00.000','N056.45.00.000:W015.00.00.000','N056.04.00.000:W010.00.00.000','N055.39.59.099:W010.00.00.000','N056.15.00.000:W015.00.00.000'],
+  '1C': ['N055.45.00.000:W015.00.00.000','N056.15.00.000:W015.00.00.000','N055.39.59.099:W010.00.00.000','N055.07.10.000:W010.00.00.000','N055.45.00.000:W015.00.00.000'],
+  '1D': ['N054.39.59.099:W011.30.00.000','N054.43.00.000:W010.00.00.000','N055.07.10.000:W010.00.00.000','N055.45.00.000:W015.00.00.000','N055.15.00.000:W015.00.00.000','N054.39.59.099:W011.30.00.000'],
+  '1E': ['N054.23.45.000:W011.30.00.000','N054.39.59.099:W011.30.00.000','N055.15.00.000:W015.00.00.000','N054.45.00.000:W015.00.00.000','N054.23.45.000:W011.30.00.000'],
+  '2A': ['N054.03.29.099:W011.30.00.000','N054.23.45.000:W011.30.00.000','N054.45.00.000:W015.00.00.000','N054.15.00.000:W015.00.00.000','N054.03.29.099:W011.30.00.000'],
+  '2B': ['N053.45.00.000:W011.30.00.000','N054.03.29.099:W011.30.00.000','N054.15.00.000:W015.00.00.000','N053.45.00.000:W015.00.00.000','N053.45.00.000:W011.30.00.000'],
+  '2C': ['N053.12.45.000:W011.30.00.000','N053.45.00.000:W011.30.00.000','N053.45.00.000:W015.00.00.000','N053.15.00.000:W015.00.00.000','N053.12.45.000:W011.30.00.000'],
+  '2D': ['N052.42.30.000:W011.30.00.000','N053.12.45.000:W011.30.00.000','N053.15.00.000:W015.00.00.000','N052.45.00.000:W015.00.00.000','N052.42.30.000:W011.30.00.000'],
+  '2E': ['N052.15.00.000:W011.21.16.000','N052.42.30.000:W011.30.00.000','N052.45.00.000:W015.00.00.000','N052.15.00.000:W015.00.00.000','N052.15.00.000:W011.21.16.000'],
+  '2F': ['N051.45.00.000:W011.10.42.099','N052.15.00.000:W011.21.16.000','N052.15.00.000:W015.00.00.000','N051.45.00.000:W015.00.00.000','N051.45.00.000:W011.10.42.099'],
+  '2G': ['N051.15.00.000:W011.00.00.000','N051.45.00.000:W011.10.42.099','N051.45.00.000:W015.00.00.000','N051.15.00.000:W015.00.00.000','N051.15.00.000:W011.00.00.000'],
+  '3A': ['N054.43.00.000:W010.00.00.000','N054.31.14.033:W008.47.34.037','N054.04.30.000:W008.54.29.099','N054.23.45.000:W011.30.00.000','N054.39.59.099:W011.30.00.000','N054.43.00.000:W010.00.00.000'],
+  '3B': ['N054.03.29.099:W011.30.00.000','N053.45.00.000:W011.30.00.000','N053.39.15.000:W009.00.00.000','N054.04.30.000:W008.54.29.099','N054.23.45.000:W011.30.00.000','N054.03.29.099:W011.30.00.000'],
+  '3C': ['N053.12.45.000:W011.30.00.000','N052.54.59.099:W009.17.29.099','N053.39.15.000:W009.00.00.000','N053.45.00.000:W011.30.00.000','N053.12.45.000:W011.30.00.000'],
+  '3D': ['N052.42.30.000:W011.30.00.000','N052.15.00.000:W011.21.16.000','N052.15.00.000:W009.35.00.000','N052.54.59.099:W009.17.29.099','N053.12.45.000:W011.30.00.000','N052.42.30.000:W011.30.00.000'],
+  '3E': ['N051.45.00.000:W011.10.42.099','N051.15.00.000:W011.00.00.000','N051.15.00.000:W010.00.00.000','N052.15.00.000:W009.35.00.000','N052.15.00.000:W011.21.16.000','N051.45.00.000:W011.10.42.099'],
+  '4A': ['N054.17.21.070:W007.27.31.043','N053.54.59.099:W005.30.00.000','N052.46.59.099:W005.30.00.000','N053.16.29.099:W007.31.30.000','N054.17.21.070:W007.27.31.043'],
+  '4B': ['N054.31.14.033:W008.47.34.037','N054.17.21.070:W007.27.31.043','N053.16.29.099:W007.31.30.000','N053.39.15.000:W009.00.00.000','N054.04.30.000:W008.54.29.099','N054.31.14.033:W008.47.34.037'],
+  '4C': ['N052.54.59.099:W009.17.29.099','N052.40.06.043:W007.46.55.006','N053.16.29.099:W007.31.30.000','N053.39.15.000:W009.00.00.000','N052.54.59.099:W009.17.29.099'],
+  '4D': ['N052.40.06.043:W007.46.55.006','N052.08.29.099:W008.00.00.000','N052.00.48.099:W006.07.19.099','N052.20.00.000:W005.30.00.000','N052.46.59.099:W005.30.00.000','N053.16.29.099:W007.31.30.000','N052.40.06.043:W007.46.55.006'],
+  '4E': ['N052.15.00.000:W009.35.00.000','N052.08.29.099:W008.00.00.000','N051.15.00.000:W008.30.00.000','N051.15.00.000:W010.00.00.000','N052.15.00.000:W009.35.00.000'],
+  '4F': ['N052.15.00.000:W009.35.00.000','N052.08.29.099:W008.00.00.000','N052.40.06.043:W007.46.55.006','N052.54.59.099:W009.17.29.099','N052.15.00.000:W009.35.00.000'],
+  '4G': ['N051.15.00.000:W008.30.00.000','N051.15.00.000:W008.06.00.000','N051.11.03.099:W007.39.57.000','N051.17.39.099:W007.27.59.000','N051.25.27.099:W007.13.51.000','N051.23.59.099:W006.53.04.099','N051.40.34.000:W006.00.27.000','N052.00.48.099:W006.07.19.099','N052.08.29.099:W008.00.00.000','N051.15.00.000:W008.30.00.000'],
+  '5A': ['N051.11.03.099:W007.39.57.000','N051.00.00.000:W008.00.00.000','N050.45.00.000:W008.00.00.000','N050.45.00.000:W011.00.00.000','N051.15.00.000:W011.00.00.000','N051.15.00.000:W010.00.00.000','N051.15.00.000:W008.30.00.000','N051.15.00.000:W008.06.00.000','N051.11.03.099:W007.39.57.000'],
+  '5B': ['N050.45.00.000:W008.00.00.000','N050.15.00.000:W008.00.00.000','N050.15.00.000:W011.00.00.000','N050.45.00.000:W011.00.00.000','N050.45.00.000:W008.00.00.000'],
+  '5C': ['N050.15.00.000:W008.00.00.000','N049.35.00.000:W008.00.00.000','N049.47.29.099:W011.30.00.000','N050.15.00.000:W011.00.00.000','N050.15.00.000:W008.00.00.000'],
+  '5D': ['N049.35.00.000:W008.00.00.000','N049.33.22.099:W006.56.17.000','N048.56.25.099:W007.33.25.000','N048.30.00.000:W008.00.00.000','N048.34.25.000:W008.45.00.000','N048.45.59.099:W011.00.00.000','N049.15.00.000:W011.00.00.000','N049.47.29.099:W011.30.00.000','N049.35.00.000:W008.00.00.000'],
+  '5E': ['N049.47.29.099:W011.30.00.000','N048.52.15.000:W012.30.00.000','N048.45.59.099:W011.00.00.000','N049.15.00.000:W011.00.00.000','N049.47.29.099:W011.30.00.000'],
+  '6A': ['N050.45.00.000:W011.00.00.000','N051.15.00.000:W011.00.00.000','N051.15.00.000:W015.00.00.000','N050.45.00.000:W015.00.00.000','N050.45.00.000:W011.00.00.000'],
+  '6B': ['N050.15.00.000:W011.00.00.000','N050.45.00.000:W011.00.00.000','N050.45.00.000:W015.00.00.000','N050.15.00.000:W015.00.00.000','N050.15.00.000:W011.00.00.000'],
+  '6C': ['N049.47.29.099:W011.30.00.000','N050.15.00.000:W011.00.00.000','N050.15.00.000:W015.00.00.000','N049.45.00.000:W015.00.00.000','N049.47.29.099:W011.30.00.000'],
+  '6D': ['N049.47.29.099:W011.30.00.000','N049.45.00.000:W015.00.00.000','N049.00.00.000:W015.00.00.000','N048.52.15.000:W012.30.00.000','N049.47.29.099:W011.30.00.000'],
+};
+
+// ─── APP STATE ────────────────────────────────────────────────────────────────
+let appState = {
+  waypoints: {},     // identifier -> {lat, lon}
+  routes: [],        // [{id, name, wps, rate, dir, color}]
+  configs: [],
+  currentConfigId: null,
+  assignSectorId: null,
+};
+
+const ROUTE_COLORS = ['#00c8ff','#ff6b6b','#69db7c','#ffd43b','#cc5de8','#ff922b','#74c0fc','#f783ac','#a9e34b','#63e6be'];
+const SECTOR_COLORS = ['#e05c5c','#5c9fe0','#e0a45c','#5cd67a','#a45ce0','#e0c55c','#5ce0e0','#e05ca4'];
+let routeColorIdx = 0;
+let sectorColorIdx = 0;
+let nextRouteId = 1;
+let nextSectorId = 1;
+let nextConfigId = 1;
+let mapLayers = { routes: true, wpsym: true, wplbl: false };
+
+// Map from last-waypoint identifier -> assigned colour
+const lastWpColorMap = {};
+function colorForLastWp(lastWp) {
+  if (!lastWpColorMap[lastWp]) {
+    lastWpColorMap[lastWp] = ROUTE_COLORS[Object.keys(lastWpColorMap).length % ROUTE_COLORS.length];
+  }
+  return lastWpColorMap[lastWp];
+}
+
+// ─── LFUNC PROCESSING ────────────────────────────────────────────────────────
+function parseDMSPart(str) {
+  const dir = str[0];
+  const parts = str.slice(1).split('.');
+  const deg = parseInt(parts[0]);
+  const min = parseInt(parts[1]);
+  const sec = parseFloat((parts[2] || '0') + (parts[3] ? '.' + parts[3] : ''));
+  let val = deg + min/60 + sec/3600;
+  if (dir === 'S' || dir === 'W') val = -val;
+  return val;
+}
+function parseCoordStr(s) {
+  const [a, b] = s.split(':');
+  return { lat: parseDMSPart(a), lon: parseDMSPart(b) };
+}
+
+const lfuncs = {};
+function buildLfuncs() {
+  for (const [id, coordStrs] of Object.entries(LFUNC_RAW)) {
+    const coords = coordStrs.map(parseCoordStr);
+    const ring = coords.map(c => [c.lon, c.lat]);
+    const polygon = turf.polygon([ring]);
+    const centroid = turf.centroid(polygon);
+    lfuncs[id] = {
+      id, coords, polygon,
+      center: { lat: centroid.geometry.coordinates[1], lon: centroid.geometry.coordinates[0] },
+      layer: null,
+    };
+  }
+}
+
+// ─── LFUNC ADJACENCY ────────────────────────────────────────────────────────
+const lfuncAdjacency = {};
+function buildLfuncAdjacency() {
+  const ids = Object.keys(LFUNC_RAW);
+  for (const id of ids) lfuncAdjacency[id] = new Set();
+  // Two LFUNCs are adjacent if they share a coordinate string
+  const coordToLfuncs = {};
+  for (const [id, coordStrs] of Object.entries(LFUNC_RAW)) {
+    for (const cs of coordStrs) {
+      if (!coordToLfuncs[cs]) coordToLfuncs[cs] = [];
+      coordToLfuncs[cs].push(id);
+    }
+  }
+  for (const lfIds of Object.values(coordToLfuncs)) {
+    for (let i = 0; i < lfIds.length; i++)
+      for (let j = i+1; j < lfIds.length; j++) {
+        lfuncAdjacency[lfIds[i]].add(lfIds[j]);
+        lfuncAdjacency[lfIds[j]].add(lfIds[i]);
+      }
+  }
+}
+
+// Sort 6x between 4x and 5x (6 series are further west than 5 series)
+function lfuncNWCompare(a, b) {
+  const n = id => parseInt(id) === 6 ? 4.5 : parseInt(id);
+  const d = n(a) - n(b);
+  if (d !== 0) return d;
+  return a[1].localeCompare(b[1]);
+}
+
+function calcSectorDescription(sector) {
+  if (!sector.lfuncIds.length) return '——';
+  const sorted = [...sector.lfuncIds].sort(lfuncNWCompare);
+  return sorted[0] + sector.lfuncIds.length.toString().padStart(2, '0');
+}
+
+function isSectorContiguous(sector) {
+  if (sector.lfuncIds.length <= 1) return true;
+  const idSet = new Set(sector.lfuncIds);
+  const visited = new Set([sector.lfuncIds[0]]);
+  const queue = [sector.lfuncIds[0]];
+  while (queue.length) {
+    const curr = queue.shift();
+    for (const nb of (lfuncAdjacency[curr] || [])) {
+      if (idSet.has(nb) && !visited.has(nb)) { visited.add(nb); queue.push(nb); }
+    }
+  }
+  return visited.size === sector.lfuncIds.length;
+}
+
+
+let map;
+let lfuncLayers = {};
+let routeLayers = {};
+let wpSymbolGroup, wpLabelGroup;
+let lfuncLabelMarkers = [];
+
+function initMap() {
+  map = L.map('map', { center: [53.0, -10.0], zoom: 6, zoomControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 12, opacity: 0.35 }).addTo(map);
+
+  wpSymbolGroup = L.layerGroup().addTo(map);
+  wpLabelGroup  = L.layerGroup().addTo(map);
+
+  if (!mapLayers['wplbl']) map.removeLayer(wpLabelGroup)
+
+  for (const [id, lfunc] of Object.entries(lfuncs)) {
+    const latlngs = lfunc.coords.map(c => [c.lat, c.lon]);
+    const layer = L.polygon(latlngs, {
+      color: '#2a4560', weight: 1.5, fillColor: '#1a3040', fillOpacity: 0.35,
+    }).addTo(map);
+    layer.on('click', () => onLfuncClick(id));
+    layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.55 }));
+    layer.on('mouseout', () => updateLfuncStyle(id));
+    lfunc.layer = layer;
+    lfuncLayers[id] = layer;
+
+    const lbl = L.marker([lfunc.center.lat, lfunc.center.lon], {
+      icon: L.divIcon({
+        className: 'lfunc-label',
+        html: `<span style="text-shadow:0 0 4px #000">${id}</span>`,
+        iconSize: [30, 14], iconAnchor: [15, 7],
+      }),
+      interactive: false, zIndexOffset: -100,
+    }).addTo(map);
+    lfuncLabelMarkers.push(lbl);
+  }
+}
+
+function onLfuncClick(id) {
+
+  // sector selected
+  if (appState.assignSectorId) {
+    toggleLfuncInSector(id, appState.assignSectorId);
+    return;
+  }
+
+  // if no config, create new config
+  let config = getCurrentConfig();
+  if (!config) {
+    const name = `Config ${appState.configs.length + 1}`;
+    const id = 'cfg-' + (nextConfigId++);
+    appState.configs.push({ id, name, sectors: [] });
+    appState.currentConfigId = id;
+    renderSectorBuilder();
+    refreshAllLfuncStyles();
+    updateStats();
+    saveState();
+    toast(`Configuration "${name}" created`);
+  }
+
+  config = getCurrentConfig();
+  if (!config) return;
+
+  // If lfunc already assigned to a sector, select sector
+  const alreadyAssigned = config.sectors.find(s => s.lfuncIds.includes(id));
+  if (alreadyAssigned) {
+    enterAssignMode(alreadyAssigned.id);
+    return;
+  }
+
+  // If lfunc not assigned, create new sector and assign lfunc
+  const sector = createNewSector();
+  if (!sector) return;
+  setTimeout(() => {
+    enterAssignMode(sector.id);
+    toggleLfuncInSector(id, sector.id);
+  }, 50);
+}
+
+function toggleMapLayer(layer) {
+  mapLayers[layer] = !mapLayers[layer];
+  const btn = document.getElementById('btn-toggle-' + layer);
+  btn.classList.toggle('active-toggle', mapLayers[layer]);
+
+  if (layer === 'routes') {
+    for (const [rid, l] of Object.entries(routeLayers)) {
+      if (mapLayers.routes) map.addLayer(l);
+      else map.removeLayer(l);
+    }
+  }
+  if (layer === 'wpsym') {
+    if (mapLayers.wpsym) map.addLayer(wpSymbolGroup);
+    else map.removeLayer(wpSymbolGroup);
+  }
+  if (layer === 'wplbl') {
+    if (mapLayers.wplbl) map.addLayer(wpLabelGroup);
+    else map.removeLayer(wpLabelGroup);
+  }
+}
+
+function updateLfuncStyle(id) {
+  const layer = lfuncLayers[id];
+  if (!layer) return;
+  const config = getCurrentConfig();
+  let sectorColor = null;
+  if (config) {
+    for (const s of config.sectors) {
+      if (s.lfuncIds.includes(id)) { sectorColor = s.color; break; }
+    }
+  }
+  if (sectorColor) {
+    layer.setStyle({ color: sectorColor, weight: 2, fillColor: sectorColor, fillOpacity: 0.25 });
+  } else {
+    layer.setStyle({ color: '#2a4560', weight: 1.5, fillColor: '#2a4560', fillOpacity: 0.15 });
+  }
+}
+
+function refreshAllLfuncStyles() {
+  for (const id of Object.keys(lfuncs)) updateLfuncStyle(id);
+}
+
+function loadToColor(load) {
+  if (load <= 0) return '#1a3040';
+  if (load < 10) return '#00e676';
+  if (load < 15) return '#ffca28';
+  if (load < 18) return '#ff9800';
+  return '#ff5252';
+}
+
+// ─── WAYPOINT MARKERS ────────────────────────────────────────────────────────
+function rebuildWpMarkers() {
+  wpSymbolGroup.clearLayers();
+  wpLabelGroup.clearLayers();
+
+  // Only display waypoints that appear in at least one route
+  const usedWps = new Set(appState.routes.flatMap(r => r.wps));
+
+  for (const name of usedWps) {
+    const wp = appState.waypoints[name];
+    if (!wp) continue;
+
+    // CircleMarker: always screen-pixel sized, no offset issues
+    const circle = L.circleMarker([wp.lat, wp.lon], {
+      radius: 3,
+      color: 'rgba(0,0,0,0.5)',
+      weight: 1,
+      fillColor: 'rgba(212,234,245,0.9)',
+      fillOpacity: 1,
+      interactive: false,
+    });
+    wpSymbolGroup.addLayer(circle);
+
+    // Label: centered horizontally, placed above the point
+    // iconAnchor x = half of icon width (center), y = full height (bottom sits at point)
+    const LBL_W = 60;
+    const LBL_H = 14;
+    const lblIcon = L.divIcon({
+      className: 'wp-label',
+      html: `<span>${name}</span>`,
+      iconSize: [LBL_W, LBL_H],
+      iconAnchor: [LBL_W / 2, LBL_H + 5],  // center-x, bottom edge above the dot
+    });
+    const lbl = L.marker([wp.lat, wp.lon], { icon: lblIcon, interactive: false, zIndexOffset: 200 });
+    wpLabelGroup.addLayer(lbl);
+  }
+}
+
+// ─── DIRECTION CALCULATION ────────────────────────────────────────────────────
+function calcRouteDir(wps) {
+  const coords = wps.map(w => appState.waypoints[w]).filter(Boolean);
+  if (coords.length < 2) return 'EB';
+  return coords[coords.length - 1].lon > coords[0].lon ? 'EB' : 'WB';
+}
+
+// ─── CALCULATIONS ────────────────────────────────────────────────────────────
+const SPEED_EB = 500;
+const SPEED_WB = 450;
+const GC_SAMPLES = 10;
+
+function buildGreatCirclePath(wps) {
+  if (wps.length < 2) return null;
+  const allCoords = [];
+  for (let i = 0; i < wps.length - 1; i++) {
+    const from = turf.point([wps[i].lon, wps[i].lat]);
+    const to = turf.point([wps[i+1].lon, wps[i+1].lat]);
+    const npts = Math.max(30, Math.round(GC_SAMPLES / (wps.length - 1)));
+    try {
+      const gc = turf.greatCircle(from, to, { npoints: npts });
+      const coords = gc.geometry.coordinates;
+      if (i === 0) allCoords.push(...coords);
+      else allCoords.push(...coords.slice(1));
+    } catch(e) {
+      allCoords.push([wps[i].lon, wps[i].lat], [wps[i+1].lon, wps[i+1].lat]);
+    }
+  }
+  return allCoords;
+}
+
+let _loadCache = null;
+let _loadCacheKey = '';
+
+function calcLfuncLoads() {
+  const key = JSON.stringify(appState.routes.map(r => [r.wps, r.rate, r.dir]));
+  if (_loadCache && _loadCacheKey === key) return _loadCache;
+
+  const loads = {};
+  for (const id of Object.keys(lfuncs)) loads[id] = { avgAc: 0, crossings: 0, routeLoads: {} };
+
+  const routePaths = {};
+  for (const route of appState.routes) {
+    const wpCoords = route.wps.map(w => appState.waypoints[w]).filter(Boolean);
+    if (wpCoords.length < 2) continue;
+    const path = buildGreatCirclePath(wpCoords);
+    if (!path || path.length < 2) continue;
+    routePaths[route.id] = path;
+
+    const speed = route.dir === 'WB' ? SPEED_WB : SPEED_EB;
+    for (const [lfId, lfunc] of Object.entries(lfuncs)) {
+      let distNm = 0;
+      for (let i = 0; i < path.length - 1; i++) {
+        const mid = [(path[i][0]+path[i+1][0])/2, (path[i][1]+path[i+1][1])/2];
+        if (turf.booleanPointInPolygon(turf.point(mid), lfunc.polygon)) {
+          distNm += turf.length(turf.lineString([path[i], path[i+1]]), { units: 'nauticalmiles' });
+        }
+      }
+      if (distNm > 0) {
+        const avgAc = route.rate * (distNm / speed);
+        loads[lfId].avgAc += avgAc;
+        loads[lfId].routeLoads[route.id] = avgAc;
+      }
+    }
+  }
+
+  // Complexity index: for each pair of same-direction routes that geometrically
+  // intersect inside an LFUNC, add (rateA + rateB) to the complexity score.
+  // This is intentionally a rough index — not an exact crossing count.
+  const routeIds = Object.keys(routePaths);
+  for (const lfId of Object.keys(lfuncs)) {
+    const rInLf = routeIds.filter(rid => (loads[lfId].routeLoads[rid] || 0) > 0.001);
+    if (rInLf.length < 2) continue;
+    let complexity = 0;
+    for (let i = 0; i < rInLf.length; i++) {
+      for (let j = i+1; j < rInLf.length; j++) {
+        const rA = appState.routes.find(r => r.id === rInLf[i]);
+        const rB = appState.routes.find(r => r.id === rInLf[j]);
+        if (!rA || !rB) continue;
+        const pA = routePaths[rA.id], pB = routePaths[rB.id];
+        if (!pA || !pB) continue;
+        if (pA[0][0] == pB[0][0] && pA[0][1] == pB[0][1]) continue;
+        console.log(pA[0], pB[0]);
+        try {
+          const ints = turf.lineIntersect(turf.lineString(pA), turf.lineString(pB));
+          const crossesInside = ints.features.some(pt =>
+            turf.booleanPointInPolygon(pt, lfuncs[lfId].polygon)
+          );
+          if (crossesInside) complexity += ((rA.rate * rB.rate)/10);
+        } catch(e) {}
+      }
+    }
+    loads[lfId].crossings = complexity;
+  }
+
+  _loadCache = loads;
+  _loadCacheKey = key;
+  return loads;
+}
+
+function invalidateCache() { _loadCache = null; _loadCacheKey = ''; }
+
+// ─── ROUTE MANAGEMENT ────────────────────────────────────────────────────────
+function addOrUpdateRouteFromApi(apiRoute) {
+  // wps from locations sorted by sortOrder
+  const sorted = [...apiRoute.locations].sort((a, b) => a.sortOrder - b.sortOrder);
+  const wps = sorted.map(l => l.waypoint.identifier);
+
+  // Register waypoints
+  for (const loc of sorted) {
+    const wp = loc.waypoint;
+    appState.waypoints[wp.identifier] = { lat: wp.latitude, lon: wp.longitude };
+  }
+
+  const existing = appState.routes.find(r => r.name === apiRoute.identifier);
+  if (existing) {
+    existing.wps = wps;
+    existing.dir = calcRouteDir(wps);
+    existing.apiId = apiRoute.id;
+    // Recompute colour only if user hasn't manually overridden it
+    if (!existing.colorOverride) {
+      existing.color = colorForLastWp(wps[wps.length - 1]);
+    }
+    invalidateCache();
+    drawRoutePath(existing);
+  } else {
+    const id = 'R' + (nextRouteId++);
+    const route = {
+      id,
+      name: apiRoute.identifier,
+      wps,
+      rate: 0,
+      dir: calcRouteDir(wps),
+      color: colorForLastWp(wps[wps.length - 1]),
+      colorOverride: false,
+      apiId: apiRoute.id,
+    };
+    appState.routes.push(route);
+    invalidateCache();
+    drawRoutePath(route);
+  }
+}
+
+function updateRoute(id, changes) {
+  const route = appState.routes.find(r => r.id === id);
+  if (!route) return;
+  Object.assign(route, changes);
+  if (changes.wps) route.dir = calcRouteDir(route.wps);
+  invalidateCache();
+  drawRoutePath(route);
+  renderRoutes();
+  updateStats();
+  refreshAllLfuncStyles();
+  rebuildWpMarkers();
+  saveState();
+}
+
+function deleteRoute(id) {
+  appState.routes = appState.routes.filter(r => r.id !== id);
+  if (routeLayers[id]) { map.removeLayer(routeLayers[id]); delete routeLayers[id]; }
+  invalidateCache();
+  renderRoutes();
+  updateStats();
+  refreshAllLfuncStyles();
+  rebuildWpMarkers();
+}
+
+function drawRoutePath(route) {
+  if (routeLayers[route.id]) { map.removeLayer(routeLayers[route.id]); delete routeLayers[route.id]; }
+  const wpCoords = route.wps.map(w => appState.waypoints[w]).filter(Boolean);
+  if (wpCoords.length < 2) return;
+  const path = buildGreatCirclePath(wpCoords);
+  if (!path) return;
+  const latlngs = path.map(c => [c[1], c[0]]);
+  const line = L.polyline(latlngs, {
+    color: route.color, weight: 2, opacity: 0.85,
+    dashArray: route.dir === 'WB' ? '6,4' : null,
+  });
+  line.bindTooltip(`${route.name} — ${route.rate}/hr`, { sticky: true });
+  if (mapLayers.routes) line.addTo(map);
+  routeLayers[route.id] = line;
+}
+
+function reDrawAllRoutes() {
+  for (const route of appState.routes) drawRoutePath(route);
+}
+
+// ─── ROUTE RENDERING (bottom panel table) ────────────────────────────────────
+function renderRoutes() {
+  const tbody = document.getElementById('routes-tbody');
+  const countEl = document.getElementById('rp-count');
+  countEl.textContent = `— ${appState.routes.length} route${appState.routes.length !== 1 ? 's' : ''}`;
+
+  if (!appState.routes.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:#3a5a6a">No routes loaded. Click ↺ Refresh to fetch from API.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = appState.routes.map(r => {
+    const missing = r.wps.filter(w => !appState.waypoints[w]);
+    const warn = missing.length ? `<span title="Missing waypoints: ${missing.join(', ')}" style="color:var(--yellow);margin-left:4px">⚠</span>` : '';
+    return `<tr id="rc-${r.id}">
+      <td class="rt-color"><div class="rt-dot" style="background:${r.color}" title="Change colour" onclick="pickRouteColor('${r.id}')"></div></td>
+      <td class="rt-name">${r.name}${warn}</td>
+      <td class="rt-rate-cell">
+        <input class="rt-rate-inp" type="number" min="0" step="0.5" value="${r.rate}"
+          onchange="updateRoute('${r.id}',{rate:parseFloat(this.value)||0})"
+          title="Aircraft per hour" />
+        <span style="color:#5a8898;font-size:10px"> /hr</span>
+      </td>
+      <td class="rt-wps" title="${r.wps.join(' DCT ')}">${r.wps.join(' · ')}</td>
+      <td class="rt-actions">
+        <button class="btn sm" onclick="showEditRouteModal('${r.id}')" title="Edit route waypoints and colour" style="margin-right:2px">Edit</button>
+        <button class="btn sm danger" onclick="deleteRoute('${r.id}')" title="Delete route">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── STATS ────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const loads = calcLfuncLoads();
+  document.getElementById('lfunc-stat-body').innerHTML = Object.keys(lfuncs).map(id => {
+    const l = loads[id];
+    const avg = l.avgAc.toFixed(2);
+    const x = l.crossings.toFixed(1);
+    const barW = Math.min(100, (l.avgAc / 12) * 100);
+    const col = loadToColor(l.avgAc * 2);
+    return `<tr>
+      <td class="stat-id">${id}</td>
+      <td><div class="load-pill">
+        <div class="load-bar-bg"><div class="load-bar-fill" style="width:${barW}%;background:${col}"></div></div>
+        <span style="color:${col}">${avg}</span>
+      </div></td>
+      <td style="color:${parseFloat(x)>0?'var(--yellow)':'var(--text)'}">${x}</td>
+    </tr>`;
+  }).join('');
+
+  // Refresh sector cards to update inline stats
+  renderSectorBuilder();
+}
+
+// ─── SECTOR BUILDER ───────────────────────────────────────────────────────────
+function getCurrentConfig() {
+  return appState.configs.find(c => c.id === appState.currentConfigId) || null;
+}
+
+function createNewSector() {
+  const config = getCurrentConfig();
+  if (!config) return null;
+  const num = config.sectors.length + 1;
+  const id = 'sec-' + (nextSectorId++);
+  const color = SECTOR_COLORS[sectorColorIdx++ % SECTOR_COLORS.length];
+  const sector = { id, name: `Sector ${num}`, vhf: '199.998', color, lfuncIds: [] };
+  config.sectors.push(sector);
+  renderSectorBuilder();
+  refreshAllLfuncStyles();
+  updateStats();
+  saveState();
+  return sector;
+}
+
+function renderSectorBuilder() {
+  const config = getCurrentConfig();
+  const addBtn = document.getElementById('add-sector-btn');
+  const emptyMsg = document.getElementById('sector-empty-msg');
+  const panel = document.getElementById('sector-list-panel');
+
+  // Update config name in header
+  document.getElementById('config-name-display').textContent = config ? config.name : 'No configuration';
+
+  if (!config) {
+    addBtn.style.display = 'none';
+    emptyMsg.style.display = '';
+    emptyMsg.innerHTML = '<span style="color:#3a5a6a">Create or load a configuration to build sectors.</span>';
+    // Remove any sector cards
+    panel.querySelectorAll('.sector-card').forEach(el => el.remove());
+    return;
+  }
+
+  addBtn.style.display = '';
+  emptyMsg.style.display = config.sectors.length ? 'none' : '';
+  if (!config.sectors.length) {
+    emptyMsg.innerHTML = '<span style="color:#3a5a6a;font-size:12px">No sectors yet.<br>Click "+ Sector" or click an LFUNC on the map.</span>';
+  }
+
+  // Re-render sector cards
+  panel.querySelectorAll('.sector-card').forEach(el => el.remove());
+
+  const loads = calcLfuncLoads();
+
+  for (const s of config.sectors) {
+    const isAssigning = appState.assignSectorId === s.id;
+    const contiguous = isSectorContiguous(s);
+    const desc = calcSectorDescription(s);
+    const warnIcon = !contiguous ? `<span title="Sector is not contiguous — LFUNCs are disconnected" style="color:var(--red);font-size:11px;margin-left:4px">⚠</span>` : '';
+
+    let totalAc = 0, totalX = 0;
+    for (const lid of s.lfuncIds) { totalAc += loads[lid]?.avgAc||0; totalX += loads[lid]?.crossings||0; }
+    const barW = Math.min(100, (totalAc / 25) * 100);
+    const accol = loadToColor(totalAc);
+    const xcol = loadToColor(totalX);
+
+    const card = document.createElement('div');
+    card.className = 'sector-card' + (isAssigning ? ' assigning' : '');
+    card.id = 'sc-' + s.id;
+    card.innerHTML = `
+      <div class="sector-card-top">
+        <div class="sector-color-dot" style="background:${s.color}" title="Change colour" onclick="pickSectorColor('${s.id}')"></div>
+        <div class="sector-card-name-wrap">
+          <div style="display:flex;align-items:center;gap:4px">
+            <span class="sector-card-name" title="Click to rename" onclick="inlineRenameSector('${s.id}', this)">${s.name}</span>
+            ${warnIcon}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="sector-vhf" title="Click to change frequency" onclick="inlineEditVhf('${s.id}', this)">${s.vhf || '199.998'}</div>
+          </div>
+        </div>
+        <div class="lfunc-chip">${desc}</div>
+        <button class="btn sm danger" onclick="deleteSector('${s.id}')" style="flex-shrink:0">✕</button>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:6px">
+        <div style="flex:1">
+          <div style="font-size:9px;color:#5a8898;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">A/C ON FREQ</div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <div class="load-bar-bg" style="width:50px"><div class="load-bar-fill" style="width:${barW}%;background:${accol}"></div></div>
+            <span style="font-size:12px;font-weight:700;color:${accol};font-family:var(--font-mono)">${totalAc.toFixed(1)}</span>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:9px;color:#5a8898;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">CROSSES/HR</div>
+          <span style="font-size:12px;font-weight:700;font-family:var(--font-mono);color:${xcol}">${totalX.toFixed(1)}</span>
+        </div>
+      </div>
+      <button class="btn sm ${isAssigning ? 'primary' : ''}" style="width:100%;font-size:10px" onclick="enterAssignMode('${s.id}')">
+        ${isAssigning ? 'Finish Editing' : 'Edit LFUNCs'}
+      </button>`;
+    panel.appendChild(card);
+  }
+}
+
+function inlineRenameSector(sectorId, el) {
+  const config = getCurrentConfig();
+  const sector = config?.sectors.find(s => s.id === sectorId);
+  if (!sector) return;
+  const inp = document.createElement('input');
+  inp.className = 'inline-edit';
+  inp.value = sector.name;
+  inp.style.cssText = 'font-size:11px;font-weight:600;color:var(--text-bright);font-family:var(--font-mono);width:100%';
+  el.replaceWith(inp);
+  inp.focus(); inp.select();
+  const finish = () => {
+    sector.name = inp.value.trim() || sector.name;
+    renderSectorBuilder();
+    
+    saveState();
+  };
+  inp.addEventListener('blur', finish);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { inp.value = sector.name; inp.blur(); } });
+}
+
+function inlineEditVhf(sectorId, el) {
+  const config = getCurrentConfig();
+  const sector = config?.sectors.find(s => s.id === sectorId);
+  if (!sector) return;
+  const inp = document.createElement('input');
+  inp.className = 'inline-edit';
+  inp.value = sector.vhf || '199.998';
+  inp.style.cssText = 'font-size:9px;color:#5a8870;font-family:var(--font-mono);width:80px';
+  el.replaceWith(inp);
+  inp.focus(); inp.select();
+  const finish = () => {
+    sector.vhf = inp.value.trim() || sector.vhf;
+    renderSectorBuilder();
+    
+    saveState();
+  };
+  inp.addEventListener('blur', finish);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { inp.value = sector.vhf; inp.blur(); } });
+}
+
+function pickSectorColor(sectorId) {
+  const config = getCurrentConfig();
+  const sector = config?.sectors.find(s => s.id === sectorId);
+  if (!sector) return;
+  const colors = SECTOR_COLORS.map(c => `<div class="color-opt ${c===sector.color?'selected':''}" style="background:${c}" data-color="${c}" onclick="selectColor(this,'m-scolor')"></div>`).join('');
+  showModal(`
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>SECTOR COLOUR — ${sector.name}</h2>
+    <div class="fgrp"><label>Choose Colour</label>
+      <div class="color-options">${colors}</div>
+      <input type="hidden" id="m-scolor" value="${sector.color}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="forceCloseModal()">Cancel</button>
+      <button class="btn primary" onclick="applySectorColor('${sectorId}')">Apply</button>
+    </div>
+  </div>`);
+}
+
+function applySectorColor(sectorId) {
+  const config = getCurrentConfig();
+  const sector = config?.sectors.find(s => s.id === sectorId);
+  if (!sector) return;
+  sector.color = document.getElementById('m-scolor').value;
+  forceCloseModal();
+  renderSectorBuilder();
+  refreshAllLfuncStyles();
+  updateStats();
+  saveState();
+}
+
+function enterAssignMode(sectorId) {
+  if (appState.assignSectorId === sectorId) { exitAssignMode(); return; }
+  appState.assignSectorId = sectorId;
+  const config = getCurrentConfig();
+  const sector = config?.sectors.find(s => s.id === sectorId);
+  const banner = document.getElementById('assign-mode-banner');
+  banner.style.display = 'flex';
+  document.getElementById('assign-banner-text').textContent = `Editing "${sector?.name}" — Click on an LFUNC to add / remove it`;
+  renderSectorBuilder();
+}
+
+function exitAssignMode() {
+  appState.assignSectorId = null;
+  document.getElementById('assign-mode-banner').style.display = 'none';
+  renderSectorBuilder();
+}
+
+function toggleLfuncInSector(lfuncId, sectorId) {
+  const config = getCurrentConfig();
+  if (!config) return;
+  const sector = config.sectors.find(s => s.id === sectorId);
+  if (!sector) return;
+
+  if (sector.lfuncIds.includes(lfuncId)) {
+    // Deselect
+    sector.lfuncIds = sector.lfuncIds.filter(id => id !== lfuncId);
+  } else {
+    // Remove from any other sector, add to this one
+    for (const s of config.sectors) s.lfuncIds = s.lfuncIds.filter(id => id !== lfuncId);
+    sector.lfuncIds.push(lfuncId);
+  }
+  renderSectorBuilder();
+  refreshAllLfuncStyles();
+  updateStats();
+  saveState();
+}
+
+function removeLfuncFromSector(lfuncId, sectorId) {
+  const config = getCurrentConfig();
+  if (!config) return;
+  const sector = config.sectors.find(s => s.id === sectorId);
+  if (!sector) return;
+  sector.lfuncIds = sector.lfuncIds.filter(id => id !== lfuncId);
+  renderSectorBuilder();
+  refreshAllLfuncStyles();
+  updateStats();
+  saveState();
+}
+
+function deleteSector(sectorId) {
+  const config = getCurrentConfig();
+  if (!config) return;
+  config.sectors = config.sectors.filter(s => s.id !== sectorId);
+  if (appState.assignSectorId === sectorId) exitAssignMode();
+  renderSectorBuilder();
+  refreshAllLfuncStyles();
+  updateStats();
+  saveState();
+}
+
+// ─── MODALS ───────────────────────────────────────────────────────────────────
+function showModal(html) {
+  document.getElementById('modal-root').innerHTML = `<div class="modal-backdrop" onclick="closeModal(event)">${html}</div>`;
+}
+function closeModal(e) { if (e && e.target !== e.currentTarget) return; forceCloseModal(); }
+function forceCloseModal() { document.getElementById('modal-root').innerHTML = ''; }
+function selectColor(el, targetId) {
+  el.closest('.color-options').querySelectorAll('.color-opt').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById(targetId).value = el.dataset.color;
+}
+
+function showEditRouteModal(id) {
+  const r = appState.routes.find(r => r.id === id);
+  if (!r) return;
+  const colors = ROUTE_COLORS.map(c => `<div class="color-opt ${c===r.color?'selected':''}" style="background:${c}" data-color="${c}" onclick="selectColor(this,'m-rcolor')"></div>`).join('');
+  showModal(`
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>EDIT ROUTE — ${r.name}</h2>
+    <div class="fgrp"><label>Route Name</label><input id="m-rname" value="${r.name}" /></div>
+    <div class="fgrp"><label>Waypoints (space or DCT separated)</label>
+      <textarea id="m-rwps">${r.wps.join(' DCT ')}</textarea>
+      <div class="hint">Direction (EB/WB) is calculated automatically from the first and last waypoint positions.</div>
+    </div>
+    <div class="fgrp"><label>Traffic Rate (a/c/hr)</label><input id="m-rrate" type="number" value="${r.rate}" min="0" step="0.5" /></div>
+    <div class="fgrp"><label>Colour</label>
+      <div class="color-options">${colors}</div>
+      <input type="hidden" id="m-rcolor" value="${r.color}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="forceCloseModal()">Cancel</button>
+      <button class="btn primary" onclick="submitEditRoute('${id}')">Save</button>
+    </div>
+  </div>`);
+}
+
+function submitEditRoute(id) {
+  const name = document.getElementById('m-rname').value.trim();
+  const wpStr = document.getElementById('m-rwps').value.trim();
+  const rate = parseFloat(document.getElementById('m-rrate').value) || 0;
+  const newColor = document.getElementById('m-rcolor').value;
+  const wps = wpStr.split(/\s+DCT\s+|\s+/i).map(w => w.trim().toUpperCase()).filter(Boolean);
+  const route = appState.routes.find(r => r.id === id);
+  // If user changed the colour from what last-wp assignment would give, mark as override
+  const autoColor = colorForLastWp(wps[wps.length - 1] || '');
+  const colorOverride = newColor !== autoColor;
+  forceCloseModal();
+  const missing = wps.filter(w => !appState.waypoints[w]);
+  if (missing.length) {
+    window._pendingEdit = { id, name, wps, rate, color: newColor, colorOverride, missing, idx: 0 };
+    showMissingWpModal();
+  } else {
+    updateRoute(id, { name, wps, rate, color: newColor, colorOverride });
+  }
+}
+
+function showMissingWpModal() {
+  const p = window._pendingEdit;
+  if (!p || p.idx >= p.missing.length) {
+    updateRoute(p.id, { name: p.name, wps: p.wps, rate: p.rate, color: p.color, colorOverride: p.colorOverride });
+    window._pendingEdit = null;
+    return;
+  }
+  const wpName = p.missing[p.idx];
+  showModal(`
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>UNKNOWN WAYPOINT — ${wpName}</h2>
+    <div style="font-size:11px;color:var(--text);margin-bottom:12px">
+      This waypoint is not in the database. Enter its coordinates to define it,
+      or skip to leave it unresolved (the route will be partially plotted).
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="fgrp"><label>Latitude (decimal °N)</label>
+        <input id="m-wplat" type="number" step="0.0001" placeholder="e.g. 54.500" />
+      </div>
+      <div class="fgrp"><label>Longitude (decimal °E)</label>
+        <input id="m-wplon" type="number" step="0.0001" placeholder="e.g. -8.250" />
+      </div>
+    </div>
+    <div class="hint">${p.idx + 1} of ${p.missing.length} unknown waypoint${p.missing.length > 1 ? 's' : ''}</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="skipMissingWp()">Skip</button>
+      <button class="btn primary" onclick="saveMissingWp('${wpName}')">Save &amp; Continue</button>
+    </div>
+  </div>`);
+  setTimeout(() => document.getElementById('m-wplat')?.focus(), 50);
+}
+
+function saveMissingWp(wpName) {
+  const lat = parseFloat(document.getElementById('m-wplat').value);
+  const lon = parseFloat(document.getElementById('m-wplon').value);
+  if (isNaN(lat) || isNaN(lon)) { toast('Enter valid coordinates'); return; }
+  appState.waypoints[wpName] = { lat, lon };
+  forceCloseModal();
+  window._pendingEdit.idx++;
+  showMissingWpModal();
+}
+
+function skipMissingWp() {
+  forceCloseModal();
+  window._pendingEdit.idx++;
+  showMissingWpModal();
+}
+
+function pickRouteColor(id) {
+  const r = appState.routes.find(r => r.id === id);
+  if (!r) return;
+  const colors = ROUTE_COLORS.map(c => `<div class="color-opt ${c===r.color?'selected':''}" style="background:${c}" data-color="${c}" onclick="selectColor(this,'m-rcolor')"></div>`).join('');
+  showModal(`
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>ROUTE COLOUR — ${r.name}</h2>
+    <div class="fgrp">
+      <div class="color-options">${colors}</div>
+      <input type="hidden" id="m-rcolor" value="${r.color}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="forceCloseModal()">Cancel</button>
+      <button class="btn primary" onclick="applyRouteColor('${id}')">Apply</button>
+    </div>
+  </div>`);
+}
+
+function applyRouteColor(id) {
+  const color = document.getElementById('m-rcolor').value;
+  updateRoute(id, { color, colorOverride: true });
+  forceCloseModal();
+}
+
+function showNewConfigModal() {
+  const num = appState.configs.length + 1;
+  showModal(`
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>NEW CONFIGURATION</h2>
+    <div class="fgrp"><label>Configuration Name</label><input id="m-cname" value="Config ${num}" /></div>
+    <div class="hint">A configuration holds a set of named sectors. You can save multiple and compare them.</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="forceCloseModal()">Cancel</button>
+      <button class="btn primary" onclick="submitNewConfig()">Create</button>
+    </div>
+  </div>`);
+  setTimeout(() => { const inp = document.getElementById('m-cname'); if (inp) { inp.focus(); inp.select(); } }, 50);
+}
+
+function submitNewConfig() {
+  const name = document.getElementById('m-cname').value.trim() || `Config ${appState.configs.length + 1}`;
+  const id = 'cfg-' + (nextConfigId++);
+  appState.configs.push({ id, name, sectors: [] });
+  appState.currentConfigId = id;
+  forceCloseModal();
+  renderSectorBuilder();
+  refreshAllLfuncStyles();
+  updateStats();
+  saveState();
+  toast(`Configuration "${name}" created`);
+}
+
+function showSaveConfigModal() {
+  const config = getCurrentConfig();
+  if (!config) { toast('No active configuration to save'); return; }
+  saveState();
+  toast(`"${config.name}" saved`);
+}
+
+function showLoadConfigModal() {
+  if (!appState.configs.length) { toast('No saved configurations'); return; }
+  showModal(`
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>CONFIGURATIONS</h2>
+    ${appState.configs.map(c => `
+      <div class="config-item">
+        <span class="config-name">${c.name}</span>
+        <span style="font-size:10px;color:var(--text)">${c.sectors.length} sectors</span>
+        <button class="btn sm primary" onclick="loadConfig('${c.id}')">Load</button>
+        <button class="btn sm" onclick="renameConfig('${c.id}')">✏</button>
+        <button class="btn sm danger" onclick="deleteConfig('${c.id}')">✕</button>
+      </div>`).join('')}
+    <div class="modal-actions"><button class="btn" onclick="forceCloseModal()">Close</button></div>
+  </div>`);
+}
+
+function loadConfig(id) {
+  appState.currentConfigId = id;
+  forceCloseModal();
+  exitAssignMode();
+  renderSectorBuilder();
+  refreshAllLfuncStyles();
+  updateStats();
+  toast(`Loaded "${getCurrentConfig()?.name}"`);
+}
+
+function renameConfig(id) {
+  const config = appState.configs.find(c => c.id === id);
+  if (!config) return;
+  forceCloseModal();
+  showModal(`
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>RENAME CONFIGURATION</h2>
+    <div class="fgrp"><label>Name</label><input id="m-cname" value="${config.name}" /></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="showLoadConfigModal()">Back</button>
+      <button class="btn primary" onclick="submitRenameConfig('${id}')">Save</button>
+    </div>
+  </div>`);
+  setTimeout(() => { const inp = document.getElementById('m-cname'); if (inp) { inp.focus(); inp.select(); } }, 50);
+}
+
+function submitRenameConfig(id) {
+  const config = appState.configs.find(c => c.id === id);
+  if (!config) return;
+  config.name = document.getElementById('m-cname').value.trim() || config.name;
+  forceCloseModal();
+  renderSectorBuilder();
+  saveState();
+}
+
+function deleteConfig(id) {
+  appState.configs = appState.configs.filter(c => c.id !== id);
+  if (appState.currentConfigId === id) appState.currentConfigId = appState.configs[0]?.id || null;
+  saveState();
+  forceCloseModal();
+  renderSectorBuilder();
+  refreshAllLfuncStyles();
+  updateStats();
+}
+
+// ─── ROUTES PANEL TOGGLE ─────────────────────────────────────────────────────
+function toggleRoutesPanel() {
+  document.getElementById('routes-panel').classList.toggle('open');
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ─── API FETCH ────────────────────────────────────────────────────────────────
+async function fetchFromAPIs() {
+  const btn = document.getElementById('btn-refresh-routes');
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  try {
+
+    // Fetch route segments
+    const rsRes = await fetch(`${API_BASE}/route-segments`);
+    if (!rsRes.ok) throw new Error(`HTTP ${rsRes.status}`);
+    const rsData = await rsRes.json();
+
+    const relevant = rsData.filter(r => r.enabled && r.routeSegmentGroup === 'EMEA' && r.facilities.includes("EISN"));
+    let eventId = 0
+    for (const seg of relevant) {
+      if (!seg.locations || seg.locations.length < 2) continue;
+      eventId = seg.eventId
+      addOrUpdateRouteFromApi(seg);
+    }
+
+    // Fetch route rates
+    fetchRates(eventId)
+
+  } catch(e) {
+    toast(`Fetch failed: ${e.message}`);
+    console.error('API fetch error:', e);
+  } finally {
+    btn.textContent = '↺ Refresh';
+    btn.disabled = false;
+  }
+
+  renderRoutes();
+  reDrawAllRoutes();
+  rebuildWpMarkers();
+  invalidateCache();
+  updateStats();
+  refreshAllLfuncStyles();
+  saveState();
+}
+
+// ─── FETCH RATES FROM SLOT REVISION ──────────────────────────────────────────
+async function fetchRates(eventId) {
+  try {
+    const slotRes = await fetch(`${API_BASE}/events/${eventId}/slot-revisions/latest`);
+    if (!slotRes.ok) throw new Error(`Slot revision fetch failed: HTTP ${slotRes.status}`);
+    const slotData = await slotRes.json();
+
+    // Parse slotPlannerDraftCommentary
+    let commentary;
+    try {
+      commentary = JSON.parse(slotData.slotPlannerDraftCommentary);
+    } catch(e) {
+      throw new Error('Could not parse slot revision commentary');
+    }
+
+    const slotGroups = commentary?.slotGroups || [];
+    if (!slotGroups.length) throw new Error('No slot groups in revision');
+
+    // Build a map: depRouteId -> sum of values, arrRouteId -> sum of values
+    const rateMap = {};
+    for (const sg of slotGroups) {
+      const val = sg.value || 0;
+      if (sg.depRouteId != null) rateMap[sg.depRouteId] = (rateMap[sg.depRouteId] || 0) + val;
+      if (sg.arrRouteId != null) rateMap[sg.arrRouteId] = (rateMap[sg.arrRouteId] || 0) + val;
+    }
+
+    // Match routes by apiId and apply rates (divide by 3 for 3-hour event)
+    let updated = 0;
+    for (const route of appState.routes) {
+      if (route.apiId != null && rateMap[route.apiId] != null) {
+        route.rate = Math.round((rateMap[route.apiId] / 3) * 10) / 10;
+        updated++;
+      }
+    }
+
+    invalidateCache();
+    renderRoutes();
+    updateStats();
+    refreshAllLfuncStyles();
+    saveState();
+    toast(`Updated rates for ${updated} route(s) from revision #${slotData.number}`);
+  } catch(e) {
+    toast(`Rate fetch failed: ${e.message}`);
+    console.error('Rate fetch error:', e);
+  }
+}
+
+// ─── PERSISTENCE ──────────────────────────────────────────────────────────────
+async function saveState() {
+  try {
+    const data = JSON.stringify({
+      waypoints: appState.waypoints,
+      routes: appState.routes,
+      configs: appState.configs,
+      currentConfigId: appState.currentConfigId,
+      nextRouteId, nextSectorId, nextConfigId,
+      routeColorIdx, sectorColorIdx,
+    });
+    if (window.storage) await window.storage.set('eisn_state', data);
+    else localStorage.setItem('eisn_state', data);
+  } catch(e) { console.warn('Save failed', e); }
+}
+
+async function loadState() {
+  try {
+    let raw = null;
+    if (window.storage) { const r = await window.storage.get('eisn_state'); raw = r?.value; }
+    else raw = localStorage.getItem('eisn_state');
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    appState.waypoints = d.waypoints || {};
+    appState.routes = d.routes || [];
+    appState.configs = d.configs || [];
+    appState.currentConfigId = d.currentConfigId || null;
+    if (d.nextRouteId) nextRouteId = d.nextRouteId;
+    if (d.nextSectorId) nextSectorId = d.nextSectorId;
+    if (d.nextConfigId) nextConfigId = d.nextConfigId;
+    if (d.routeColorIdx) routeColorIdx = d.routeColorIdx;
+    if (d.sectorColorIdx) sectorColorIdx = d.sectorColorIdx;
+    // Rebuild lastWpColorMap from saved routes so colours stay consistent
+    for (const r of appState.routes) {
+      if (!r.colorOverride && r.wps.length) {
+        const lastWp = r.wps[r.wps.length - 1];
+        if (!lastWpColorMap[lastWp]) lastWpColorMap[lastWp] = r.color;
+      }
+    }
+    return true;
+  } catch(e) { console.warn('Load failed', e); return false; }
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+async function init() {
+  buildLfuncs();
+  buildLfuncAdjacency();
+  initMap();
+
+  const hadSaved = await loadState();
+
+  if (hadSaved && appState.routes.length) {
+    reDrawAllRoutes();
+    rebuildWpMarkers();
+    renderRoutes();
+  } else {
+    // Auto-fetch on first load
+    await fetchFromAPIs();
+  }
+
+  renderSectorBuilder();
+  updateStats();
+  refreshAllLfuncStyles();
+}
+
+init();
+</script>
+</body>
+</html>
