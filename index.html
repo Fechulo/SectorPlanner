@@ -6,6 +6,7 @@
 <title>Sector Planner</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍕</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
@@ -1439,7 +1440,7 @@ async function fetchFromAPIs() {
 
     // Fetch route rates
     fetchRates(eventId)
-
+    
   } catch(e) {
     toast(`Fetch failed: ${e.message}`);
     console.error('API fetch error:', e);
@@ -1460,7 +1461,7 @@ async function fetchFromAPIs() {
 // ─── FETCH RATES FROM SLOT REVISION ──────────────────────────────────────────
 async function fetchRates(eventId) {
   try {
-    const slotRes = await fetch(`${API_BASE}/events/${eventId}/slot-revisions/latest`);
+    const slotRes = await fetch(`${API_BASE}/events/${eventId}/slot-revisions/latest?_=${Date.now()}`);
     if (!slotRes.ok) throw new Error(`Slot revision fetch failed: HTTP ${slotRes.status}`);
     const slotData = await slotRes.json();
 
