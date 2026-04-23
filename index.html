@@ -75,6 +75,7 @@ body {
 .logo-title { font-size: 13px; font-weight: 600; color: var(--text-bright); letter-spacing: 0.5px; }
 .header-sep { width: 1px; height: 24px; background: var(--border); }
 .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+#config-name-display:hover { border-bottom-color: var(--border2); color: var(--text-bright); }
 
 .btn {
   padding: 5px 11px;
@@ -305,11 +306,11 @@ body {
     <span class="logo-title">🍕EISN Sector Planner</span>
   </div>
   <div class="header-sep"></div>
-  <span id="config-name-display" style="font-size:11px;color:var(--text);font-family:var(--font-mono)">No configuration</span>
+  <span id="config-name-display" style="font-size:11px;color:var(--text);font-family:var(--font-mono);cursor:pointer;border-bottom:1px solid transparent;transition:border-color 0.15s" title="Click to rename" onclick="inlineRenameConfig(this)">No configuration</span>
   <div class="header-right">
     <button class="btn primary" onclick="showNewConfigModal()">＋ New Config</button>
-    <button class="btn" onclick="showSaveConfigModal()">Save</button>
     <button class="btn" onclick="showLoadConfigModal()">Load</button>
+    <button class="btn" onclick="exportConfig()">Export</button>
   </div>
 </div>
 
@@ -425,6 +426,16 @@ const LFUNC_RAW = {
   '5C': ['N050.15.00.000:W008.00.00.000','N049.35.00.000:W008.00.00.000','N049.47.29.099:W011.30.00.000','N050.15.00.000:W011.00.00.000','N050.15.00.000:W008.00.00.000'],
   '5D': ['N049.35.00.000:W008.00.00.000','N049.33.22.099:W006.56.17.000','N048.56.25.099:W007.33.25.000','N048.30.00.000:W008.00.00.000','N048.34.25.000:W008.45.00.000','N048.45.59.099:W011.00.00.000','N049.15.00.000:W011.00.00.000','N049.47.29.099:W011.30.00.000','N049.35.00.000:W008.00.00.000'],
   '5E': ['N049.47.29.099:W011.30.00.000','N048.52.15.000:W012.30.00.000','N048.45.59.099:W011.00.00.000','N049.15.00.000:W011.00.00.000','N049.47.29.099:W011.30.00.000'],
+};
+
+const SECTOR_FREQS = {
+  'SNE': '134.260',
+  'SNB': '127.130',
+  'SNS': '135.230',
+  'SNN': '122.980',
+  'SNO': '135.600',
+  'SNW': '131.150',
+  'SND': '129.665',
 };
 
 // ─── APP STATE ────────────────────────────────────────────────────────────────
@@ -972,7 +983,8 @@ function renderSectorBuilder() {
   const panel = document.getElementById('sector-list-panel');
 
   // Update config name in header
-  document.getElementById('config-name-display').textContent = config ? config.name : 'No configuration';
+  const nameEl = document.getElementById('config-name-display');
+  if (nameEl) nameEl.textContent = config ? config.name : 'No configuration';
 
   if (!config) {
     addBtn.style.display = 'none';
@@ -1056,6 +1068,7 @@ function inlineRenameSector(sectorId, el) {
   inp.focus(); inp.select();
   const finish = () => {
     sector.name = inp.value.trim() || sector.name;
+    sector.vhf = SECTOR_FREQS[sector.name] || '199.998';
     renderSectorBuilder();
     
     saveState();
@@ -1331,11 +1344,53 @@ function submitNewConfig() {
   toast(`Configuration "${name}" created`);
 }
 
-function showSaveConfigModal() {
+function exportConfig() {
   const config = getCurrentConfig();
-  if (!config) { toast('No active configuration to save'); return; }
-  saveState();
-  toast(`"${config.name}" saved`);
+  if (!config) { toast('No active configuration to export'); return; }
+  const lines = [];
+  for (const s of config.sectors) {
+    for (const lfuncId of s.lfuncIds) {
+      lines.push(`${lfuncId}U:${s.name} - EISN_CTR (${s.vhf || '199.998'})`);
+      lines.push(`${lfuncId}S:${s.name} - EISN_CTR (${s.vhf || '199.998'})`);
+    }
+  }
+  if (!lines.length) { toast('No LFUNC assignments to export'); return; }
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${config.name}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function inlineRenameConfig(el) {
+  const config = getCurrentConfig();
+  if (!config) return;
+  const inp = document.createElement('input');
+  inp.value = config.name;
+  inp.style.cssText = 'font-size:11px;color:var(--text-bright);font-family:var(--font-mono);background:none;border:none;border-bottom:1px solid var(--accent);outline:none;width:160px;padding:0';
+  el.replaceWith(inp);
+  inp.focus(); inp.select();
+  const finish = () => {
+    config.name = inp.value.trim() || config.name;
+    saveState();
+    const newSpan = document.createElement('span');
+    newSpan.id = 'config-name-display';
+    newSpan.style.cssText = 'font-size:11px;color:var(--text);font-family:var(--font-mono);cursor:pointer;border-bottom:1px solid transparent;transition:border-color 0.15s';
+    newSpan.title = 'Click to rename';
+    newSpan.textContent = config.name;
+    newSpan.onclick = function() { inlineRenameConfig(this); };
+    newSpan.onmouseover = function() { this.style.borderBottomColor = 'var(--border2)'; this.style.color = 'var(--text-bright)'; };
+    newSpan.onmouseout  = function() { this.style.borderBottomColor = 'transparent'; this.style.color = 'var(--text)'; };
+    inp.replaceWith(newSpan);
+    renderSectorBuilder(); // updates the config name shown elsewhere
+  };
+  inp.addEventListener('blur', finish);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') inp.blur();
+    if (e.key === 'Escape') { inp.value = config.name; inp.blur(); }
+  });
 }
 
 function showLoadConfigModal() {
@@ -1465,30 +1520,22 @@ async function fetchRates(eventId) {
     if (!slotRes.ok) throw new Error(`Slot revision fetch failed: HTTP ${slotRes.status}`);
     const slotData = await slotRes.json();
 
-    // Parse slotPlannerDraftCommentary
-    let commentary;
-    try {
-      commentary = JSON.parse(slotData.slotPlannerDraftCommentary);
-    } catch(e) {
-      throw new Error('Could not parse slot revision commentary');
+    const slots = slotData.slots || [];
+    if (!slots.length) throw new Error('No slots in revision');
+
+    // Count how many slots each route segment id appears in
+    const countMap = {};
+    for (const slot of slots) {
+      for (const seg of (slot.routeSegments || [])) {
+        countMap[seg.id] = (countMap[seg.id] || 0) + 1;
+      }
     }
 
-    const slotGroups = commentary?.slotGroups || [];
-    if (!slotGroups.length) throw new Error('No slot groups in revision');
-
-    // Build a map: depRouteId -> sum of values, arrRouteId -> sum of values
-    const rateMap = {};
-    for (const sg of slotGroups) {
-      const val = sg.value || 0;
-      if (sg.depRouteId != null) rateMap[sg.depRouteId] = (rateMap[sg.depRouteId] || 0) + val;
-      if (sg.arrRouteId != null) rateMap[sg.arrRouteId] = (rateMap[sg.arrRouteId] || 0) + val;
-    }
-
-    // Match routes by apiId and apply rates (divide by 3 for 3-hour event)
+    // Apply rates: count / 3 (3-hour event)
     let updated = 0;
     for (const route of appState.routes) {
-      if (route.apiId != null && rateMap[route.apiId] != null) {
-        route.rate = Math.round((rateMap[route.apiId] / 3) * 10) / 10;
+      if (route.apiId != null && countMap[route.apiId] != null) {
+        route.rate = Math.round((countMap[route.apiId] / 3) * 10) / 10;
         updated++;
       }
     }
@@ -1504,6 +1551,7 @@ async function fetchRates(eventId) {
     console.error('Rate fetch error:', e);
   }
 }
+
 
 // ─── PERSISTENCE ──────────────────────────────────────────────────────────────
 async function saveState() {
